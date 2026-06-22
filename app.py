@@ -677,4 +677,4 @@ with col_pdf:
         use_container_width=True,
     )
 
-rodape("RiaChuello")
+rodape("RiaChuelo")
