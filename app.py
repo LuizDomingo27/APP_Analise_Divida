@@ -554,6 +554,8 @@ with col3:
         """, unsafe_allow_html=True,
     )
 
+    st.markdown(f"<br>", unsafe_allow_html=True)
+    
 col4, col5, col6 = st.columns(3)
 with col4:
     st.markdown(
@@ -577,6 +579,8 @@ with col5:
         </div>
         """, unsafe_allow_html=True,
     )
+    
+    
 with col6:
     st.markdown(
         f"""
