@@ -157,6 +157,20 @@ def substituir_dados(df: pd.DataFrame, origem_arquivo: str) -> dict:
 # ---------------------------------------------------------------------------
 # Leitura
 # ---------------------------------------------------------------------------
+def _desserializar_termino(valor: str):
+    """
+    Converte de volta para data quando o valor salvo é uma data válida
+    (formato YYYY-MM-DD usado na gravação). Caso contrário, preserva o
+    texto original (ex: "DESCREDENCIADA"), em vez de descartá-lo como NaT.
+    """
+    if valor is None or valor == "":
+        return None
+    data = pd.to_datetime(valor, format="%Y-%m-%d", errors="coerce")
+    if pd.isna(data):
+        return valor
+    return data
+
+
 def obter_dividas() -> pd.DataFrame:
     """Retorna os dados vigentes da tabela `dividas`, já no formato do app."""
     with get_connection() as conn:
@@ -168,9 +182,7 @@ def obter_dividas() -> pd.DataFrame:
     df = df.rename(columns=MAPA_BANCO_PARA_APP)
     if not df.empty:
         df["QUITADO"] = df["QUITADO"].replace({"NAO": "NÃO"})
-        df["TERMINO DA DIVIDA"] = pd.to_datetime(
-            df["TERMINO DA DIVIDA"], errors="coerce"
-        )
+        df["TERMINO DA DIVIDA"] = df["TERMINO DA DIVIDA"].apply(_desserializar_termino)
     return df
 
 

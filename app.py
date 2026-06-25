@@ -258,10 +258,10 @@ def fmt_brl(valor: float) -> str:
 
 def fmt_data(valor) -> str:
     """Formata datas para dd/mm/aaaa; mantém texto (ex: 'DESCREDÊNCIADA') como está."""
-    if isinstance(valor, (pd.Timestamp, datetime, date)):
-        return valor.strftime("%d/%m/%Y")
     if pd.isna(valor):
         return "-"
+    if isinstance(valor, (pd.Timestamp, datetime, date)):
+        return valor.strftime("%d/%m/%Y")
     return str(valor)
 
 
