@@ -216,3 +216,19 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Banco de dados da aplicação (SQLite)
+# ---------------------------------------------------------------------------
+# O arquivo data/dividas.db É VERSIONADO DE PROPÓSITO (não ignorado): no
+# Streamlit Community Cloud o disco não é persistente entre "sonos"/reinícios
+# do app, então o banco precisa estar no repositório para os dados não se
+# perderem. Faça commit deste arquivo após cada importação de planilha caso
+# queira manter os dados entre deploys.
+data/dividas.db-journal
+data/dividas.db-wal
+data/dividas.db-shm
+
+# Backups automáticos gerados a cada substituição de dados (não versionar)
+data/backups/*.csv
+!data/backups/.gitkeep

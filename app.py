@@ -13,6 +13,14 @@ import html
 from io import BytesIO
 from datetime import datetime, date
 from utils.Functions import rodape
+from database import (
+    init_db,
+    substituir_dados,
+    obter_dividas,
+    obter_historico_cargas,
+    obter_ultima_carga,
+    banco_esta_vazio,
+)
 import pandas as pd
 import streamlit as st
 
@@ -37,6 +45,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+init_db()
+
 # ---------------------------------------------------------------------------
 # Paleta de cores — Verde neon água
 # ---------------------------------------------------------------------------
@@ -50,7 +60,7 @@ TEXT_DARK     = "#0B2B26"
 TEXT_MUTED    = "#5C7A75"
 BORDER_SOFT   = "#D2F3EA"
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "Contas_a_receber.xlsx")
+LEGACY_XLSX_PATH = os.path.join(os.path.dirname(__file__), "data", "Contas_a_receber.xlsx")
 
 # ---------------------------------------------------------------------------
 # CSS customizado
@@ -271,7 +281,8 @@ REQUIRED_COLS = [
 
 
 @st.cache_data(show_spinner=False)
-def carregar_dados(file_bytes_or_path) -> pd.DataFrame:
+def ler_planilha_upload(file_bytes_or_path) -> pd.DataFrame:
+    """Lê e valida uma planilha (.xlsx, aba 'RESUMO') antes de gravar no banco."""
     df = pd.read_excel(file_bytes_or_path, sheet_name="RESUMO")
     df.columns = [c.strip() for c in df.columns]
     faltantes = [c for c in REQUIRED_COLS if c not in df.columns]
@@ -283,6 +294,25 @@ def carregar_dados(file_bytes_or_path) -> pd.DataFrame:
     for col in ["VALOR DIVIDA", "VALOR PAGO", "VALOR RESTANTE"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
     return df
+
+
+def garantir_carga_inicial() -> None:
+    """
+    Na primeira execução (banco vazio), importa automaticamente a planilha
+    legada de data/Contas_a_receber.xlsx, se ela existir, para que o app
+    já abra com dados em vez de uma tela vazia.
+    """
+    if not banco_esta_vazio():
+        return
+    if not os.path.exists(LEGACY_XLSX_PATH):
+        return
+    try:
+        df_inicial = ler_planilha_upload(LEGACY_XLSX_PATH)
+        substituir_dados(df_inicial, origem_arquivo="Contas_a_receber.xlsx (carga inicial)")
+    except Exception:
+        # Se a planilha legada estiver corrompida/ausente, apenas segue
+        # com o banco vazio — o usuário poderá fazer upload manualmente.
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -459,27 +489,69 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+garantir_carga_inicial()
+
 # ---------------------------------------------------------------------------
 # Sidebar — fonte de dados e filtros
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## Base de dados")
     arquivo_upload = st.file_uploader(
-        "Atualizar planilha (.xlsx com aba 'RESUMO')", type=["xlsx"]
+        "Importar nova planilha (.xlsx com aba 'RESUMO')", type=["xlsx"]
     )
-    st.caption("Se nenhum arquivo for enviado, a planilha padrão é utilizada.")
+    st.caption(
+        "O upload substitui todos os dados vigentes do banco (a planilha já "
+        "traz o histórico completo). Um backup automático é salvo antes da "
+        "substituição."
+    )
+
+    if arquivo_upload is not None:
+        if st.button("📥  Confirmar importação", use_container_width=True, type="primary"):
+            try:
+                df_novo = ler_planilha_upload(arquivo_upload)
+                info_carga = substituir_dados(df_novo, origem_arquivo=arquivo_upload.name)
+                st.cache_data.clear()
+                st.success(
+                    f"Base atualizada: {info_carga['qtd_registros']} registros importados."
+                )
+                st.rerun()
+            except Exception as e:
+                st.error(f"Não foi possível importar a planilha: {e}")
+
+    ultima_carga = obter_ultima_carga()
+    if ultima_carga is not None:
+        st.caption(
+            f"Última atualização: **{ultima_carga['data_carga']}**  \n"
+            f"Origem: {ultima_carga['origem_arquivo']}"
+        )
+
+    with st.expander("Histórico de importações"):
+        hist = obter_historico_cargas()
+        if hist.empty:
+            st.caption("Nenhuma importação registrada ainda.")
+        else:
+            st.dataframe(
+                hist.rename(columns={
+                    "id": "ID", "data_carga": "Data", "origem_arquivo": "Arquivo",
+                    "qtd_registros": "Registros", "backup_arquivo": "Backup",
+                }),
+                hide_index=True, use_container_width=True,
+            )
 
     st.divider()
-    #st.markdown("---")
     st.markdown("## Filtros")
 
 try:
-    if arquivo_upload is not None:
-        df_raw = carregar_dados(arquivo_upload)
-    else:
-        df_raw = carregar_dados(DATA_PATH)
+    df_raw = obter_dividas()
 except Exception as e:
-    st.error(f"Não foi possível carregar os dados: {e}")
+    st.error(f"Não foi possível carregar os dados do banco: {e}")
+    st.stop()
+
+if df_raw.empty:
+    st.info(
+        "Nenhum dado encontrado no banco. Envie uma planilha pela barra "
+        "lateral para começar."
+    )
     st.stop()
 
 with st.sidebar:
