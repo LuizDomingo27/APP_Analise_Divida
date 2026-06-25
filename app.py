@@ -499,11 +499,6 @@ with st.sidebar:
     arquivo_upload = st.file_uploader(
         "Importar nova planilha (.xlsx com aba 'RESUMO')", type=["xlsx"]
     )
-    st.caption(
-        "O upload substitui todos os dados vigentes do banco (a planilha já "
-        "traz o histórico completo). Um backup automático é salvo antes da "
-        "substituição."
-    )
 
     if arquivo_upload is not None:
         if st.button("📥  Confirmar importação", use_container_width=True, type="primary"):
@@ -517,26 +512,6 @@ with st.sidebar:
                 st.rerun()
             except Exception as e:
                 st.error(f"Não foi possível importar a planilha: {e}")
-
-    ultima_carga = obter_ultima_carga()
-    if ultima_carga is not None:
-        st.caption(
-            f"Última atualização: **{ultima_carga['data_carga']}**  \n"
-            f"Origem: {ultima_carga['origem_arquivo']}"
-        )
-
-    with st.expander("Histórico de importações"):
-        hist = obter_historico_cargas()
-        if hist.empty:
-            st.caption("Nenhuma importação registrada ainda.")
-        else:
-            st.dataframe(
-                hist.rename(columns={
-                    "id": "ID", "data_carga": "Data", "origem_arquivo": "Arquivo",
-                    "qtd_registros": "Registros", "backup_arquivo": "Backup",
-                }),
-                hide_index=True, use_container_width=True,
-            )
 
     st.divider()
     st.markdown("## Filtros")
