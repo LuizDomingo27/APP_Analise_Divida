@@ -13,6 +13,7 @@ import html
 from io import BytesIO
 from datetime import datetime, date
 from utils.Functions import rodape
+from utils import github_sync
 from database import (
     init_db,
     substituir_dados,
@@ -44,6 +45,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Reidrata o banco a partir do GitHub ANTES de inicializar/ler.
+# No Streamlit Cloud o disco é efêmero; se o app reiniciou sem banco local,
+# pull_db() restaura os dados da última sincronização (não sobrescreve um
+# banco local já existente). Silencioso quando a integração não está
+# configurada — o app funciona normalmente sem ela.
+try:
+    github_sync.pull_db()
+except Exception:
+    pass
 
 init_db()
 
@@ -509,9 +520,63 @@ with st.sidebar:
                 st.success(
                     f"Base atualizada: {info_carga['qtd_registros']} registros importados."
                 )
+                # Persiste no GitHub para os dados sobreviverem a reinícios
+                # do Streamlit Cloud (disco efêmero).
+                if github_sync.sync_disponivel():
+                    try:
+                        res = github_sync.push_db(
+                            mensagem=f"Importa {arquivo_upload.name} via app "
+                                     f"({info_carga['qtd_registros']} registros)"
+                        )
+                        if res["status"] == "ok":
+                            st.success("☁️  Dados sincronizados com o GitHub.")
+                        elif res["status"] == "skipped":
+                            st.info(f"GitHub: {res['detalhe']}")
+                    except Exception as e:
+                        st.warning(
+                            "Importação concluída, mas a sincronização com o "
+                            f"GitHub falhou: {e}"
+                        )
                 st.rerun()
             except Exception as e:
                 st.error(f"Não foi possível importar a planilha: {e}")
+
+    # -----------------------------------------------------------------------
+    # Sincronização com o GitHub (persistência no Streamlit Cloud)
+    # -----------------------------------------------------------------------
+    st.divider()
+    st.markdown("## Sincronização")
+    if github_sync.sync_disponivel():
+        st.caption("Integração com GitHub ativa.")
+        col_push, col_pull = st.columns(2)
+        with col_push:
+            if st.button("☁️  Enviar", use_container_width=True,
+                         help="Envia o banco local para o GitHub."):
+                try:
+                    res = github_sync.push_db()
+                    msg = {"ok": st.success, "skipped": st.info,
+                           "disabled": st.warning}.get(res["status"], st.info)
+                    msg(res["detalhe"])
+                except Exception as e:
+                    st.error(f"Falha ao enviar: {e}")
+        with col_pull:
+            if st.button("⬇️  Baixar", use_container_width=True,
+                         help="Substitui o banco local pelo do GitHub."):
+                try:
+                    res = github_sync.pull_db(sobrescrever=True)
+                    if res["status"] == "ok":
+                        st.cache_data.clear()
+                        st.success(res["detalhe"])
+                        st.rerun()
+                    else:
+                        st.info(res["detalhe"])
+                except Exception as e:
+                    st.error(f"Falha ao baixar: {e}")
+    else:
+        st.caption(
+            "GitHub não configurado. Defina `[github]` token e repo em "
+            "Secrets para ativar a persistência automática."
+        )
 
     st.divider()
     st.markdown("## Filtros")
